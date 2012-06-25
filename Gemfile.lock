@@ -27,6 +27,8 @@ GIT
 GEM
   remote: http://rubygems.org/
   specs:
+    bloom_filter (0.6.6)
+      eventmachine (>= 0.12.8)
     builder (3.0.0)
     ci_reporter (1.6.4)
       builder (>= 2.1.2)
@@ -68,6 +70,7 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
+  bloom_filter
   bundler (>= 1.0.10)
   ci_reporter
   eventmachine!

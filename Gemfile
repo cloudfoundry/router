@@ -2,6 +2,7 @@ source "http://rubygems.org"
 
 gem 'bundler', '>= 1.0.10'
 gem 'rake'
+gem 'bloom_filter'
 gem 'nats', :require => 'nats/client'
 gem 'eventmachine', :git => 'git://github.com/cloudfoundry/eventmachine.git', :branch => 'release-0.12.11-cf'
 

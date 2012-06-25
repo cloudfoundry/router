@@ -4,6 +4,7 @@ require 'optparse'
 require 'socket'
 require 'yaml'
 require 'openssl'
+require 'bloom_filter'
 
 require 'rubygems'
 require 'bundler/setup'

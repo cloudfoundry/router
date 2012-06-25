@@ -78,6 +78,26 @@ describe 'Router Functional Tests' do
     app.verify_unregistered
   end
 
+  it 'should properly publish active applications set' do
+    # setup the "app"
+    app1 = TestApp.new('router_test1.vcap.me')
+    app2 = TestApp.new('router_test2.vcap.me')
+    dea = DummyDea.new(@nats_server.uri, '1234')
+    dea.register_app(app1)
+    dea.register_app(app2)
+    app1.verify_registered
+    app2.verify_registered
+
+    NATS.start(:uri => @nats_server.uri) do
+      NATS.subscribe('router.active_apps') do |msg|
+        bloom_filter = BloomFilter.load(Yajl::Parser.parse(msg))
+        bloom_filter.include?(app1.id).should == true
+        bloom_filter.include?(app2.id).should == true
+        NATS.stop
+      end
+    end
+  end
+
   it 'should generate the same token as router v1 did' do
     Router.config({})
     token = Router.generate_session_cookie(ROUTER_V1_DROPLET)
