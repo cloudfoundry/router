@@ -235,6 +235,9 @@ class Router
     def flush_active_apps
       return unless @enable_nonprod_apps
 
+      return if @flushing
+      @flushing = true
+
       @active_apps, @flushing_apps = @flushing_apps, @active_apps
       @active_apps.clear
 
@@ -244,6 +247,8 @@ class Router
 
         log.info("Flushing active apps, app size: #{@flushing_apps.size}, msg size: #{zmsg.size}")
         EM.next_tick { NATS.publish('router.active_apps', zmsg) }
+
+        @flushing = false
       end
 
     end
