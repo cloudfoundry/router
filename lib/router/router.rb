@@ -174,7 +174,7 @@ class Router
       droplets = @droplets[url] || []
       # Skip the ones we already know about..
       droplets.each { |droplet|
-        # If we already now about them just update the timestamp..
+        # If we already know about them just update the timestamp..
         if(droplet[:host] == host && droplet[:port] == port)
           droplet[:timestamp] = Time.now
 		  droplet[:res_usage] = res_usage
