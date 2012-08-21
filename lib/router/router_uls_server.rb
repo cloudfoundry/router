@@ -41,8 +41,7 @@ class RouterULSServer < Sinatra::Base
 	  
 	  # If the res_usage is not available, pick randomly
 	  best_index = rand*droplets.size
-	  
-      cpu_min = 0.0
+	  cpu_min = 0.0
       mem_min = 0
       
       # Check res_usage of all isntances registed for this url
@@ -69,7 +68,7 @@ class RouterULSServer < Sinatra::Base
             mem_min = res_usage[:mem]
             best_index = i    
           end
-        end             
+        end      
      
       end
       
