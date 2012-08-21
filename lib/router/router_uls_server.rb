@@ -33,12 +33,48 @@ class RouterULSServer < Sinatra::Base
         raise Sinatra::NotFound
       end
 
-      # Pick a droplet based on original backend addr or pick a droplet randomly
+      # Pick a droplet based on original backend addr or pick a droplet wisely
       if sticky
         _, host, port = Router.decrypt_session_cookie(sticky)
         droplet = check_original_droplet(droplets, host, port)
       end
-      droplet ||= droplets[rand*droplets.size]
+	  
+	  # If the res_usage is not available, pick randomly
+	  best_index = rand*droplets.size
+	  
+      cpu_min = 0.0
+      mem_min = 0
+      
+      # Check res_usage of all isntances registed for this url
+      droplets.each_with_index do |d, i|
+        
+        res_usage = d[:res_usage]
+        
+        # If res_usage is nil, jump out
+        if (!res_usage)
+          break
+        else
+          # Use the first instance for variables initiation
+          if(i == 0)
+            cpu_min = res_usage[:cpu]
+            mem_min = res_usage[:mem]
+          end
+          
+          #TODO: Some performance analysis work can make this part better 
+		  #Simple algorithm: Check cpu first, then memory
+          if(res_usage[:cpu] < cpu_min)  
+            cpu_min = res_usage[:cpu]
+            best_index = i     
+          elsif(res_usage[:cpu] == cpu_min && res_usage[:mem] < mem_min)
+            mem_min = res_usage[:mem]
+            best_index = i    
+          end
+        end             
+     
+      end
+      
+      droplet ||= droplets[best_index]
+
       Router.log.debug "Routing #{droplet[:url]} to #{droplet[:host]}:#{droplet[:port]}"
 
       # Update droplet stats
