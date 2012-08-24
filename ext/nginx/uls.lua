@@ -159,16 +159,18 @@ function vcap_handle_cookies(ngx)
 
   if type(cookies) ~= "table" then cookies = {cookies} end
   local sticky = false
+  local sess_cookie
   for _, val in ipairs(cookies) do
     local i, j = string.find(val:upper(), STICKY_SESSIONS)
     if i then
       sticky = true
+      sess_cookie = val
       break
     end
   end
   if not sticky then return end
 
-  local vcap_cookie = VCAP_SESSION_ID.."="..ngx.var.sticky
+  local vcap_cookie = string.gsub(sess_cookie, "%S+%s*=%s*%w+", VCAP_SESSION_ID.."="..ngx.var.sticky)
 
   ngx.log(ngx.DEBUG, "generate cookie:"..vcap_cookie.." for resp from:"..
           ngx.var.backend_addr)
