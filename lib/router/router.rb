@@ -172,9 +172,9 @@ class Router
       return unless host && port
       url.downcase!
       droplets = @droplets[url] || []
-      # Skip the ones we already know about..
+      # Skip the ones we already know about.
       droplets.each { |droplet|
-        # If we already now about them just update the timestamp..
+        # If we already now about them just update the timestamp.
         if(droplet[:host] == host && droplet[:port] == port)
           droplet[:timestamp] = Time.now
           return
