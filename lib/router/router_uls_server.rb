@@ -38,7 +38,10 @@ class RouterULSServer < Sinatra::Base
         _, host, port = Router.decrypt_session_cookie(sticky)
         droplet = check_original_droplet(droplets, host, port)
       end
-      droplet ||= droplets[rand*droplets.size]
+
+      best_index ||= pick_instance_wisely(droplets)
+      droplet ||= droplets[best_index]
+
       Router.log.debug "Routing #{droplet[:url]} to #{droplet[:host]}:#{droplet[:port]}"
 
       # Update droplet stats
@@ -61,6 +64,42 @@ class RouterULSServer < Sinatra::Base
     end
 
     uls_response.to_json
+  end
+  
+  # This is a weight-based strategy, res_usage is the weight of each instance 
+  def pick_instance_wisely(droplets)
+    sum = 0.0
+    seed = 0.0
+
+    droplets.each do |d|
+      res_usage = d[:res_usage]
+      if(res_usage)
+        if(res_usage != 0)
+          res_usage = 1/res_usage
+        end
+        seed += res_usage
+      else
+        return rand*droplets.size
+      end
+    end
+
+    randtmp = rand(seed)
+
+    droplets.each_with_index do |d, i|
+      res_usage = d[:res_usage]
+      if(res_usage)
+        if(res_usage != 0)
+          res_usage = 1/res_usage
+        end
+          sum += res_usage
+        if(randtmp < sum)
+          return i
+        end
+      else
+        return rand*droplets.size
+      end
+    end
+
   end
 
   not_found do
