@@ -34,22 +34,18 @@ class Router
 
       @session_key = config['session_key'] || '14fbc303b76bacd1e0a3ab641c11d11400341c5d'
       @expose_all_apps = config['status']['expose_all_apps'] if config['status']
-
-      @enable_nonprod_apps = config['enable_nonprod_apps'] || false
-      if @enable_nonprod_apps
-        @flush_apps_interval = config['flush_apps_interval'] || 30
-        @active_apps = Set.new
-        @flushing_apps = Set.new
-        @flushing = false
-      end
     end
 
     def setup_listeners
       NATS.subscribe('router.register') { |msg|
         msg_hash = Yajl::Parser.parse(msg, :symbolize_keys => true)
         return unless uris = msg_hash[:uris]
-        uris.each { |uri| register_droplet(uri, msg_hash[:host], msg_hash[:port],
-                                           msg_hash[:tags], msg_hash[:app]) }
+        uris.each { |uri| register_droplet(uri, msg_hash[:host], msg_hash[:port], msg_hash[:tags]) }
+      }
+      NATS.subscribe('router.update.droplet') { |msg|
+        msg_hash = Yajl::Parser.parse(msg, :symbolize_keys => true)
+        return unless uris = msg_hash[:uris]
+        uris.each { |uri| update_droplet(uri, msg_hash[:host], msg_hash[:port], msg_hash[:res_usage]) }
       }
       NATS.subscribe('router.unregister') { |msg|
         msg_hash = Yajl::Parser.parse(msg, :symbolize_keys => true)
@@ -65,11 +61,6 @@ class Router
       EM.add_periodic_timer(CHECK_SWEEPER) {
         check_registered_urls
       }
-      if @enable_nonprod_apps
-        EM.add_periodic_timer(@flush_apps_interval) do
-          flush_active_apps
-        end
-      end
     end
 
     def calc_rps
@@ -168,7 +159,7 @@ class Router
       @droplets[url.downcase]
     end
 
-    def register_droplet(url, host, port, tags, app_id)
+    def register_droplet(url, host, port, tags)
       return unless host && port
       url.downcase!
       droplets = @droplets[url] || []
@@ -182,7 +173,6 @@ class Router
       }
       tags.delete_if { |key, value| key.nil? || value.nil? } if tags
       droplet = {
-        :app => app_id,
         :host => host,
         :port => port,
         :clients => Hash.new(0),
@@ -198,6 +188,21 @@ class Router
       VCAP::Component.varz[:droplets] += 1
       log.info "Registering #{url} at #{host}:#{port}"
       log.info "#{droplets.size} servers available for #{url}"
+    end
+    
+    # Update resource usage based on feedback from DEA
+    def update_droplet(url, host, port, res_usage)
+      return unless host && port
+      url.downcase!
+      droplets = @droplets[url] || []
+      droplets.each { |droplet|
+        # Update the res_usage and rimestamp
+        if(droplet[:host] == host && droplet[:port] == port)
+          droplet[:timestamp] = Time.now
+          droplet[:res_usage] = res_usage
+          return
+        end
+      }
     end
 
     def unregister_droplet(url, host, port)
@@ -227,31 +232,5 @@ class Router
       end
     end
 
-    def add_active_app(app_id)
-      return unless @enable_nonprod_apps
-
-      @active_apps << app_id
-    end
-
-    def flush_active_apps
-      return unless @enable_nonprod_apps
-
-      return if @flushing
-      @flushing = true
-
-      @active_apps, @flushing_apps = @flushing_apps, @active_apps
-      @active_apps.clear
-
-      EM.defer do
-        msg = Yajl::Encoder.encode(@flushing_apps.to_a)
-        zmsg = Zlib::Deflate.deflate(msg)
-
-        log.info("Flushing active apps, app size: #{@flushing_apps.size}, msg size: #{zmsg.size}")
-        EM.next_tick { NATS.publish('router.active_apps', zmsg) }
-
-        @flushing = false
-      end
-
-    end
   end
 end
