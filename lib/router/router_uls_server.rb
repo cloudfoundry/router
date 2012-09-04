@@ -27,25 +27,72 @@ class RouterULSServer < Sinatra::Base
     end
 
     if url then
+    
       # Lookup a droplet
       unless droplets = Router.lookup_droplet(url)
         Router.log.debug "No droplet registered for #{url}"
         raise Sinatra::NotFound
       end
 
-      # Pick a droplet based on original backend addr or pick a droplet randomly
+      # Pick a droplet based on original backend addr or pick a droplet wisely
       if sticky
         _, host, port = Router.decrypt_session_cookie(sticky)
         droplet = check_original_droplet(droplets, host, port)
+        uls_response = routing_and_update(droplet)
+      else
+        
+        best_index = pick_instance_wisely(droplets)
+        
+        droplet ||= droplets[best_index]
+        uls_response = routing_and_update(droplet)
+      end # if sticky
+    end # if url
+    uls_response.to_json
+  end # get / do
+ 
+  # This is a weight-based strategy, res_usage is the weight of each instance 
+  def pick_instance_wisely(droplets)
+    
+    sum = 0.0
+    seed = 0.0
+    
+    droplets.each do |d|
+      res_usage = d[:res_usage]
+      if(res_usage)
+        if(res_usage != 0)
+          res_usage = 1/res_usage
+        end
+        seed += res_usage
+      else
+        return rand*droplets.size
       end
-      droplet ||= droplets[rand*droplets.size]
+    end
+    
+    randtmp = rand(seed)
+    
+    droplets.each_with_index do |d, i|
+      res_usage = d[:res_usage]
+      if(res_usage)
+        if(res_usage != 0)
+          res_usage = 1/res_usage
+        end
+          sum += res_usage
+        if(randtmp < sum)
+          return i
+        end
+      else
+        return rand*droplets.size
+      end
+    end
+    
+  end
+ 
+  def routing_and_update(droplet)
+ 
       Router.log.debug "Routing #{droplet[:url]} to #{droplet[:host]}:#{droplet[:port]}"
 
       # Update droplet stats
       update_droplet_stats(droplet)
-
-      # Update active apps
-      Router.add_active_app(droplet[:app]) if droplet[:app]
 
       # Get session cookie for droplet
       new_sticky = Router.get_session_cookie(droplet)
@@ -55,13 +102,11 @@ class RouterULSServer < Sinatra::Base
         ULS_STICKY_SESSION => new_sticky,
         ULS_BACKEND_ADDR   => "#{droplet[:host]}:#{droplet[:port]}",
         ULS_REQUEST_TAGS   => uls_req_tags,
-        ULS_ROUTER_IP      => Router.inet,
-        ULS_APP_ID         => droplet[:app] || 0,
-      }
-    end
-
-    uls_response.to_json
+        ULS_ROUTER_IP      => Router.inet
+      }      
+      uls_response
   end
+ 
 
   not_found do
     VCAP::Component.varz[:bad_requests] += 1
@@ -77,7 +122,7 @@ class RouterULSServer < Sinatra::Base
     status 400
     "VCAP ROUTER: 400 - FAILED TO PARSE PAYLOAD"
   end
-
+ 
   error do
     VCAP::Component.varz[:bad_requests] += 1
     Router.log.error env['sinatra.error']
