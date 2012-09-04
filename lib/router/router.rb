@@ -51,6 +51,11 @@ class Router
         uris.each { |uri| register_droplet(uri, msg_hash[:host], msg_hash[:port],
                                            msg_hash[:tags], msg_hash[:app]) }
       }
+      NATS.subscribe('router.update.droplet') { |msg|
+        msg_hash = Yajl::Parser.parse(msg, :symbolize_keys => true)
+        return unless uris = msg_hash[:uris]
+        uris.each { |uri| update_droplet(uri, msg_hash[:host], msg_hash[:port], msg_hash[:res_usage]) }
+      }
       NATS.subscribe('router.unregister') { |msg|
         msg_hash = Yajl::Parser.parse(msg, :symbolize_keys => true)
         return unless uris = msg_hash[:uris]
@@ -172,9 +177,9 @@ class Router
       return unless host && port
       url.downcase!
       droplets = @droplets[url] || []
-      # Skip the ones we already know about..
+      # Skip the ones we already know about.
       droplets.each { |droplet|
-        # If we already now about them just update the timestamp..
+        # If we already now about them just update the timestamp.
         if(droplet[:host] == host && droplet[:port] == port)
           droplet[:timestamp] = Time.now
           return
@@ -198,6 +203,21 @@ class Router
       VCAP::Component.varz[:droplets] += 1
       log.info "Registering #{url} at #{host}:#{port}"
       log.info "#{droplets.size} servers available for #{url}"
+    end
+
+    # Update resource usage based on feedback from DEA
+    def update_droplet(url, host, port, res_usage)
+      return unless host && port
+      url.downcase!
+      droplets = @droplets[url] || []
+      droplets.each { |droplet|
+        # Update the res_usage and time-stamp
+        if(droplet[:host] == host && droplet[:port] == port)
+          droplet[:timestamp] = Time.now
+          droplet[:res_usage] = res_usage
+          return
+        end
+      }
     end
 
     def unregister_droplet(url, host, port)
